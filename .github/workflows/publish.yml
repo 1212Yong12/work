@@ -1,0 +1,39 @@
+name: Publish portfolio
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download the published website
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          tag="${RELEASE_TAG:-$(gh release view --json tagName --jq .tagName)}"
+          gh release download "$tag" --pattern portfolio-web.zip --dir "$RUNNER_TEMP"
+          unzip -q "$RUNNER_TEMP/portfolio-web.zip" -d public
+          test -s public/index.html
+      - name: Package the static files
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: public
+      - name: Deploy the portfolio
+        id: deployment
+        uses: actions/deploy-pages@v4
