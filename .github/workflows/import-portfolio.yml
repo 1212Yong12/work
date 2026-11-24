@@ -1,0 +1,50 @@
+name: Import portfolio and publish
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/import-portfolio.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out the portfolio inventory
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Restore the public portfolio and verify its checksums
+        run: python3 migration/import_portfolio.py
+      - name: Store the portfolio in this repository's releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view v1.0.0 >/dev/null 2>&1; then
+            if ! gh release view v1.0.0 --json assets --jq '.assets[].name' | grep -Fxq portfolio-web.zip; then
+              gh release upload v1.0.0 portfolio-web.zip
+            fi
+          else
+            gh release create v1.0.0 portfolio-web.zip --target "$GITHUB_SHA" --title 'UX/UI 디자인 포트폴리오' --notes '프로젝트 목록과 상세 이미지를 포함한 포트폴리오 웹사이트입니다.'
+          fi
+      - name: Package the website
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: public
+      - name: Publish the portfolio
+        id: deployment
+        uses: actions/deploy-pages@v4
